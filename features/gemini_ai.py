@@ -8,8 +8,9 @@ print("GeminiAI 모듈 로딩 중...")
 
 # Gemini API 설정
 genai.configure(api_key=Config.GEMINI_API_KEY)
+
 model = genai.GenerativeModel(
-    model_name="gemini-pro",
+    model_name="gemini-1.5-flash", 
     generation_config=Config.GENERATION_CONFIG
 )
 
@@ -69,7 +70,7 @@ class GeminiAI:
             
         except Exception as e:
             logging.error(f"Gemini API 오류: {e}")
-            return "죄송합니다. 현재 서비스에 문제가 있습니다. 잠시 후 다시 시도해주세요."
+            return "죄송합니다. 현재 AI 서비스에 문제가 있습니다. 잠시 후 다시 시도해주세요."
 
     @staticmethod
     def clear_conversation(user_id):
