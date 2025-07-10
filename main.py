@@ -6,12 +6,18 @@ from features.weather import WeatherManager
 import logging
 import os
 from datetime import datetime
+import threading
+import time
 
 app = Flask(__name__)
 
 # 각 매니저 인스턴스 생성
 game_manager = GameManager()
 weather_manager = WeatherManager()
+
+# 전역 변수 추가
+processing_requests = {}
+response_cache = {}
 
 # 로깅 설정 개선
 logging.basicConfig(
@@ -62,104 +68,175 @@ def extract_user_info(data):
 def webhook():
     """카카오톡 챗봇 웹훅 엔드포인트"""
     try:
-        # 요청 데이터 검증
         data = request.get_json()
         if not data:
-            return '', 200  # 빈 응답
+            return '', 200
         
         user_message, user_id, room_id = extract_user_info(data)
         logger.info(f"방({room_id}) 사용자({user_id}) 메시지: {user_message}")
         
-        # 메시지 전처리
         user_message = user_message.strip()
         command_parts = user_message.split()
         
-        # 빈 메시지 처리
         if not user_message:
-            return '', 200  # 빈 응답
+            return '', 200
         
-        # 명령어 라우팅
+        # AI 질문 명령어의 경우 즉시 응답 + 백그라운드 처리
+        if command_parts[0].startswith('/질문'):
+            if len(command_parts) > 1:
+                question = ' '.join(command_parts[1:])
+                session_key = f"{room_id}_{user_id}"
+                
+                # 중복 요청 방지
+                if session_key in processing_requests:
+                    return jsonify(create_simple_text_response(
+                        "⏳ 이전 질문을 처리 중입니다. `/확인`으로 결과를 확인하세요!"
+                    ))
+                
+                # 즉시 응답 메시지
+                processing_message = f"""🤖 **AI 답변 준비 중...**
+
+💭 **질문:** "{question}"
+
+⏳ 잠시만 기다려주세요!
+
+✨ *10초 후 `/확인` 명령어로 답변을 확인하세요!*"""
+                
+                # 백그라운드에서 AI 처리 시작
+                threading.Thread(
+                    target=process_ai_background, 
+                    args=(question, user_id, room_id)
+                ).start()
+                
+                return jsonify(create_simple_text_response(processing_message))
+            else:
+                return jsonify(create_simple_text_response("""🤖 **AI 질문하기**
+                
+💬 **사용법:**
+`/질문 [질문내용]`
+
+📝 **예시:**
+• `/질문 파이썬 공부법 알려줘`
+• `/질문 영어 번역해줘: 안녕하세요`
+• `/질문 재미있는 이야기 해줘`
+
+무엇이든 궁금한 걸 물어보세요! ✨"""))
+        
+        # `/확인` 명령어 추가
+        elif command_parts[0] == '/확인':
+            session_key = f"{room_id}_{user_id}"
+            
+            if session_key in response_cache:
+                response_data = response_cache[session_key]
+                # 응답 후 캐시에서 제거
+                del response_cache[session_key]
+                return jsonify(create_simple_text_response(response_data['response']))
+            elif session_key in processing_requests:
+                return jsonify(create_simple_text_response(
+                    "🔄 아직 AI가 답변을 준비 중입니다. 조금 더 기다려주세요!"
+                ))
+            else:
+                return jsonify(create_simple_text_response(
+                    "📝 처리 중인 질문이 없습니다. `/질문 [내용]`으로 새로운 질문을 해보세요!"
+                ))
+        
+        # 다른 명령어는 기존 방식대로 (단, /질문 제외)
         ai_response = route_command(user_id, room_id, user_message, command_parts)
         
-        # 응답이 None이면 아무것도 반환하지 않음 (일반 대화는 무시)
         if ai_response is None:
-            return '', 200  # 빈 응답
+            return '', 200
         
         return jsonify(create_simple_text_response(ai_response))
         
-    except ValueError as e:
-        logger.error(f"데이터 검증 오류: {e}")
-        return '', 200  # 빈 응답
     except Exception as e:
         logger.error(f"웹훅 처리 오류: {e}")
-        return '', 200  # 빈 응답
+        return '', 200
+
+def process_ai_background(question, user_id, room_id):
+    """백그라운드에서 AI 응답 처리"""
+    session_key = f"{room_id}_{user_id}"
+    
+    try:
+        # 처리 중 상태 설정
+        processing_requests[session_key] = {
+            'start_time': time.time(),
+            'question': question
+        }
+        
+        logger.info(f"AI 백그라운드 처리 시작: {question}")
+        
+        # 실제 AI 응답 생성
+        start_time = time.time()
+        ai_response = GeminiAI.get_response(question, f"{room_id}_{user_id}")
+        processing_time = time.time() - start_time
+        
+        logger.info(f"AI 응답 완료: {processing_time:.2f}초")
+        
+        # 응답 포맷팅
+        formatted_response = f"""🤖 **AI 답변**
+
+❓ **질문:** {question}
+
+💡 **답변:**
+{ai_response}
+
+⏱️ *처리시간: {processing_time:.1f}초*
+✨ 추가 질문이 있으시면 `/질문 [내용]`으로 물어보세요!"""
+        
+        # 응답 캐시에 저장
+        response_cache[session_key] = {
+            'response': formatted_response,
+            'timestamp': datetime.now(),
+            'processed': True
+        }
+        
+        logger.info(f"AI 응답 캐시 저장 완료")
+        
+    except Exception as e:
+        logger.error(f"AI 백그라운드 처리 오류: {e}")
+        
+        error_response = f"""❌ **AI 처리 오류**
+
+질문: {question}
+오류: 일시적인 문제가 발생했습니다.
+
+🔄 잠시 후 다시 시도해주세요."""
+        
+        response_cache[session_key] = {
+            'response': error_response,
+            'timestamp': datetime.now(),
+            'processed': True,
+            'error': True
+        }
+    
+    finally:
+        # 처리 완료 후 상태 정리
+        if session_key in processing_requests:
+            del processing_requests[session_key]
 
 def get_korean_cities():
     """한국 도시 목록 반환"""
     return [
-        # 특별시
-        '서울',
-        
-        # 광역시
-        '부산', '대구', '인천', '광주', '대전', '울산',
-        
-        # 특별자치시
-        '세종',
-        
-        # 경기도
+        '서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
         '수원', '성남', '용인', '안양', '안산', '과천', '광명', '광주', '군포', '부천',
         '시흥', '김포', '안성', '오산', '의왕', '이천', '평택', '하남', '화성', '여주',
         '양평', '고양', '구리', '남양주', '동두천', '양주', '의정부', '파주', '포천',
-        '가평', '연천',
-        
-        # 강원도
-        '춘천', '원주', '강릉', '동해', '태백', '속초', '삼척',
+        '가평', '연천', '춘천', '원주', '강릉', '동해', '태백', '속초', '삼척',
         '홍천', '횡성', '영월', '평창', '정선', '철원', '화천', '양구', '인제', '고성', '양양',
-        
-        # 충청북도
-        '청주', '충주', '제천',
-        '보은', '옥천', '영동', '증평', '진천', '괴산', '음성', '단양',
-        
-        # 충청남도
+        '청주', '충주', '제천', '보은', '옥천', '영동', '증평', '진천', '괴산', '음성', '단양',
         '천안', '공주', '보령', '아산', '서산', '논산', '계룡', '당진',
         '금산', '부여', '서천', '청양', '홍성', '예산', '태안',
-        
-        # 전라북도
         '전주', '군산', '익산', '정읍', '남원', '김제',
         '완주', '진안', '무주', '장수', '임실', '순창', '고창', '부안',
-        
-        # 전라남도
         '목포', '여수', '순천', '나주', '광양',
         '담양', '곡성', '구례', '고흥', '보성', '화순', '장흥', '강진', '해남', '영암',
         '무안', '함평', '영광', '장성', '완도', '진도', '신안',
-        
-        # 경상북도
         '포항', '경주', '김천', '안동', '구미', '영주', '영천', '상주', '문경', '경산',
         '군위', '의성', '청송', '영양', '영덕', '청도', '고령', '성주', '칠곡',
         '예천', '봉화', '울진', '울릉',
-        
-        # 경상남도
         '창원', '진주', '통영', '사천', '김해', '밀양', '거제', '양산',
         '의령', '함안', '창녕', '고성', '남해', '하동', '산청', '함양', '거창', '합천',
-        
-        # 제주특별자치도
-        '제주', '서귀포',
-        
-        # 서울 구
-        '종로구', '중구', '용산구', '성동구', '광진구', '동대문구', '중랑구', '성북구',
-        '강북구', '도봉구', '노원구', '은평구', '서대문구', '마포구', '양천구', '강서구',
-        '구로구', '금천구', '영등포구', '동작구', '관악구', '서초구', '강남구', '송파구', '강동구',
-        
-        # 기타 자주 사용되는 별칭들
-        '판교', '분당', '일산', '평촌', '중계', '잠실', '강남', '홍대', '명동', '이태원',
-        '신촌', '압구정', '청담', '역삼', '삼성', '선릉', '건대', '성수', '왕십리',
-        '용산', '한남', '여의도', '마포', '상암', '목동', '영등포', '신림', '사당',
-        '교대', '서초', '잠원', '반포', '한강', '송파', '문정', '석촌', '방이',
-        '둔촌', '천호', '길동', '상일', '명일', '고덕', '암사', '천왕', '풍납',
-        
-        # 신도시 및 개발지구
-        '동탄', '광교', '김포신도시', '파주신도시', '운정', '검단신도시', '청라',
-        '송도', '영종도', '세종신도시', '오창', '진천', '혁신도시'
+        '제주', '서귀포'
     ]
 
 def get_world_cities():
@@ -173,10 +250,7 @@ def get_world_cities():
         'oslo', 'copenhagen', 'helsinki', 'dublin', 'lisbon', 'athens',
         'istanbul', 'moscow', 'sydney', 'melbourne', 'brisbane', 'perth',
         'auckland', 'wellington', 'vancouver', 'toronto', 'montreal',
-        'dubai', 'doha', 'riyadh', 'cairo', 'casablanca', 'johannesburg',
-        'nairobi', 'lagos', 'accra', 'addisababa', 'mumbai', 'delhi',
-        'bangalore', 'kolkata', 'chennai', 'hyderabad', 'sao paulo',
-        'rio de janeiro', 'brasilia', 'salvador', 'fortaleza', 'belo horizonte'
+        'dubai', 'doha', 'riyadh', 'cairo', 'casablanca', 'johannesburg'
     ]
     
     korean_cities = [
@@ -188,8 +262,7 @@ def get_world_cities():
         '오슬로', '코펜하겐', '헬싱키', '더블린', '리스본', '아테네',
         '이스탄불', '모스크바', '시드니', '멜번', '브리즈번', '퍼스',
         '오클랜드', '웰링턴', '밴쿠버', '토론토', '몬트리올',
-        '두바이', '도하', '리야드', '카이로', '카사블랑카', '요하네스버그',
-        '나이로비', '라고스', '아크라', '아디스아바바', '뭄바이', '델리'
+        '두바이', '도하', '리야드', '카이로', '카사블랑카', '요하네스버그'
     ]
     
     return english_cities + korean_cities
@@ -212,44 +285,17 @@ def is_city_command(command):
             city_lower in world_cities_lower)
 
 def route_command(user_id, room_id, user_message, command_parts):
-    """명령어 라우팅 처리 - 명령어만 처리"""
+    """명령어 라우팅 처리 - /질문과 /확인은 제외"""
     try:
         # 명령어가 아니면 None 반환 (응답 안함)
         if not user_message.startswith('/') and user_message.lower() not in ['도움말', 'help']:
             return None
         
-        # AI 질문 명령어
-        if command_parts[0].startswith('/질문'):
-            logger.info(f"질문 명령어 감지: {user_message}")  # 디버깅 로그 추가
-            
-            if len(command_parts) > 1:
-                question = ' '.join(command_parts[1:])
-                logger.info(f"질문 내용: {question}")  # 디버깅 로그 추가
-                logger.info(f"사용자 ID: {user_id}, 방 ID: {room_id}")  # 디버깅 로그 추가
-                
-                try:
-                    logger.info("GeminiAI.get_response 호출 시작")  # 디버깅 로그 추가
-                    ai_response = GeminiAI.get_response(question, f"{room_id}_{user_id}")
-                    logger.info(f"GeminiAI 응답 성공: {ai_response[:100]}...")  # 디버깅 로그 추가
-                    return ai_response
-                except Exception as e:
-                    logger.error(f"GeminiAI 호출 오류: {e}")  # 구체적인 오류 로그
-                    return f"AI 처리 중 오류가 발생했습니다: {str(e)}"
-            else:
-                return """🤖 **AI 질문하기**
-                
-💬 **사용법:**
-`/질문 [질문내용]`
-
-📝 **예시:**
-• `/질문 파이썬 공부법 알려줘`
-• `/질문 영어 번역해줘: 안녕하세요`
-• `/질문 재미있는 이야기 해줘`
-• `/질문 오늘 뭐 먹을까?`
-
-무엇이든 궁금한 걸 물어보세요! ✨"""
+        # /질문과 /확인 명령어는 webhook에서 처리하므로 여기서 제외
+        if command_parts[0].startswith('/질문') or command_parts[0] == '/확인':
+            return None  # webhook에서 이미 처리됨
         
-        # 나머지 명령어들...
+        # /숨, /AI 명령어
         elif (command_parts[0].startswith('/숨') or 
               command_parts[0].startswith('/AI') or
               command_parts[0].startswith('/ai')):
@@ -278,7 +324,6 @@ def route_command(user_id, room_id, user_message, command_parts):
         
         # 알 수 없는 명령어
         else:
-            logger.info(f"알 수 없는 명령어: {user_message}")  # 디버깅 로그 추가
             return "알 수 없는 명령어입니다. `/숨` 또는 `/질문 [내용]`을 사용해보세요."
             
     except Exception as e:
@@ -288,7 +333,6 @@ def route_command(user_id, room_id, user_message, command_parts):
 def handle_main_command(user_id, room_id, command_parts):
     """/숨 또는 /AI 명령어 처리"""
     if len(command_parts) == 1:
-        # 기본 명령어
         return get_main_menu()
     
     sub_command = command_parts[1].lower()
@@ -316,6 +360,7 @@ def get_main_menu():
 
 🧠 **AI 질문:**
 • `/질문 [질문내용]` - AI와 대화하기
+• `/확인` - AI 답변 결과 확인
 
 📋 **빠른 명령어:**
 • `/숨 도움말` - 전체 사용법
@@ -332,8 +377,7 @@ def get_main_menu():
 • `/tokyo`, `/newyork` - 해외 도시
 
 📝 **사용 예시:**
-• `/질문 파이썬 공부법 알려줘`
-• `/질문 영어 번역해줘: 안녕하세요`
+• `/질문 파이썬 공부법 알려줘` → 10초 후 → `/확인`
 • `/점심추천`
 • `/서울`
 
@@ -345,8 +389,9 @@ def get_help_message():
 
 🧠 **AI와 대화:**
 • `/질문 [질문내용]` - AI에게 무엇이든 물어보세요!
+• `/확인` - AI 답변 결과 확인
 
-📝 **질문 예시:**
+📝 **AI 질문 예시:**
 • `/질문 파이썬 공부법 알려줘`
 • `/질문 영어 번역해줘: 오늘 날씨가 좋네요`
 • `/질문 재미있는 이야기 해줘`
@@ -367,9 +412,10 @@ def get_help_message():
 • `/서울`, `/부산` - 간편 조회
 • `/날씨 [도시명]` - 상세 정보
 
-💡 **팁:** 
-• AI 대화는 `/질문`으로만 시작하세요!
-• 일반 메시지는 무시됩니다.
+💡 **AI 사용 팁:** 
+1. `/질문 내용` 입력
+2. "AI 답변 준비 중..." 메시지 확인
+3. 10초 후 `/확인`으로 답변 확인
 
 무엇을 도와드릴까요? ✨"""
 
@@ -460,6 +506,7 @@ def home():
             <div class="feature">
                 <h3>🎯 바로 사용하기</h3>
                 <p><code>/질문 [질문내용]</code> - AI와 대화</p>
+                <p><code>/확인</code> - AI 답변 확인</p>
                 <p><code>/점심추천</code> - 점심 메뉴 추천</p>
                 <p><code>/서울</code> - 서울 날씨</p>
                 <p><code>/게임</code> - 게임 센터</p>

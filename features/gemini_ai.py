@@ -53,14 +53,19 @@ class GeminiAI:
 
     @staticmethod
     def get_response(user_message, user_id):
-        """Gemini AI 응답 생성"""
+        """Gemini AI 응답 생성 - 백그라운드용"""
         try:
-            print(f"사용자 메시지 처리 중: {user_message}")
+            logging.info(f"백그라운드 AI 처리: {user_message}")
             
             # 컨텍스트가 포함된 메시지 생성
             context_message = GeminiAI.build_context_message(user_id, user_message)
             
+            # AI 응답 생성 (타임아웃 걱정 없음)
             response = model.generate_content(context_message)
+            
+            if not response or not response.text:
+                return "죄송합니다. AI가 응답을 생성하지 못했습니다."
+            
             ai_response = response.text
             
             # 대화 기록 저장
@@ -70,7 +75,7 @@ class GeminiAI:
             
         except Exception as e:
             logging.error(f"Gemini API 오류: {e}")
-            return "죄송합니다. 현재 AI 서비스에 문제가 있습니다. 잠시 후 다시 시도해주세요."
+            return f"AI 서비스 오류가 발생했습니다: {str(e)}"
 
     @staticmethod
     def clear_conversation(user_id):
