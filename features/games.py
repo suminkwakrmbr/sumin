@@ -40,6 +40,10 @@ class GameManager:
         def get_session_key(self, user_id, room_id, game_type="default"):
             """고유 세션 키 생성"""
             return f"{room_id}_{user_id}_{game_type}"
+        
+    def get_session_key(self, user_id, room_id, game_type="default"):
+        """고유 세션 키 생성"""
+        return f"{room_id}_{user_id}_{game_type}"
     
     def balance_game(self):
         """밸런스 게임 (개인용)"""
