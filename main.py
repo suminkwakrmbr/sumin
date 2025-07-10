@@ -65,7 +65,7 @@ def webhook():
         # 요청 데이터 검증
         data = request.get_json()
         if not data:
-            return jsonify(create_error_response("요청 데이터가 없습니다."))
+            return '', 200  # 빈 응답
         
         user_message, user_id, room_id = extract_user_info(data)
         logger.info(f"방({room_id}) 사용자({user_id}) 메시지: {user_message}")
@@ -76,19 +76,23 @@ def webhook():
         
         # 빈 메시지 처리
         if not user_message:
-            return jsonify(create_simple_text_response("메시지를 입력해주세요."))
+            return '', 200  # 빈 응답
         
         # 명령어 라우팅
         ai_response = route_command(user_id, room_id, user_message, command_parts)
+        
+        # 응답이 None이면 아무것도 반환하지 않음 (일반 대화는 무시)
+        if ai_response is None:
+            return '', 200  # 빈 응답
         
         return jsonify(create_simple_text_response(ai_response))
         
     except ValueError as e:
         logger.error(f"데이터 검증 오류: {e}")
-        return jsonify(create_error_response(str(e)))
+        return '', 200  # 빈 응답
     except Exception as e:
         logger.error(f"웹훅 처리 오류: {e}")
-        return jsonify(create_error_response())
+        return '', 200  # 빈 응답
 
 def get_korean_cities():
     """한국 도시 목록 반환"""
@@ -208,13 +212,29 @@ def is_city_command(command):
             city_lower in world_cities_lower)
 
 def route_command(user_id, room_id, user_message, command_parts):
-    """명령어 라우팅 처리 - /질문 명령어 적용"""
+    """명령어 라우팅 처리 - 명령어만 처리"""
     try:
+        # 명령어가 아니면 None 반환 (응답 안함)
+        if not user_message.startswith('/') and user_message.lower() not in ['도움말', 'help']:
+            return None
+        
         # AI 질문 명령어
         if command_parts[0].startswith('/질문'):
+            logger.info(f"질문 명령어 감지: {user_message}")  # 디버깅 로그 추가
+            
             if len(command_parts) > 1:
                 question = ' '.join(command_parts[1:])
-                return GeminiAI.get_response(question, f"{room_id}_{user_id}")
+                logger.info(f"질문 내용: {question}")  # 디버깅 로그 추가
+                logger.info(f"사용자 ID: {user_id}, 방 ID: {room_id}")  # 디버깅 로그 추가
+                
+                try:
+                    logger.info("GeminiAI.get_response 호출 시작")  # 디버깅 로그 추가
+                    ai_response = GeminiAI.get_response(question, f"{room_id}_{user_id}")
+                    logger.info(f"GeminiAI 응답 성공: {ai_response[:100]}...")  # 디버깅 로그 추가
+                    return ai_response
+                except Exception as e:
+                    logger.error(f"GeminiAI 호출 오류: {e}")  # 구체적인 오류 로그
+                    return f"AI 처리 중 오류가 발생했습니다: {str(e)}"
             else:
                 return """🤖 **AI 질문하기**
                 
@@ -229,7 +249,7 @@ def route_command(user_id, room_id, user_message, command_parts):
 
 무엇이든 궁금한 걸 물어보세요! ✨"""
         
-        # 기존 /숨, /AI 명령어는 메뉴용으로만
+        # 나머지 명령어들...
         elif (command_parts[0].startswith('/숨') or 
               command_parts[0].startswith('/AI') or
               command_parts[0].startswith('/ai')):
@@ -256,24 +276,10 @@ def route_command(user_id, room_id, user_message, command_parts):
         elif user_message.lower() in ['도움말', 'help']:
             return get_main_menu()
         
-        # 일반 메시지 - AI 호출 안함
+        # 알 수 없는 명령어
         else:
-            return """🤖 **숨.AI 사용법**
-            
-🧠 **AI에게 질문:**
-• `/질문 [질문내용]` - AI와 대화
-
-🎯 **바로 사용:**  
-• `/점심추천` - 점심 메뉴 추천
-• `/게임` - 게임 센터
-• `/서울`, `/부산` - 날씨 조회
-• `/숨` 또는 `/AI` - 전체 메뉴
-
-📝 **예시:**
-• `/질문 파이썬 공부법 알려줘`
-• `/질문 재미있는 농담 해줘`
-
-어떤 기능을 사용하시겠어요? ✨"""
+            logger.info(f"알 수 없는 명령어: {user_message}")  # 디버깅 로그 추가
+            return "알 수 없는 명령어입니다. `/숨` 또는 `/질문 [내용]`을 사용해보세요."
             
     except Exception as e:
         logger.error(f"명령어 처리 오류: {e}")
@@ -363,32 +369,38 @@ def get_help_message():
 
 💡 **팁:** 
 • AI 대화는 `/질문`으로만 시작하세요!
-• 다른 메시지는 AI 호출 없이 안내만 제공합니다.
+• 일반 메시지는 무시됩니다.
 
 무엇을 도와드릴까요? ✨"""
 
 def get_bot_info():
     """봇 정보"""
     return """🤖 **숨.AI 정보**
+
 🏷️ **버전**: v1.0
 🧠 **AI 엔진**: Google Gemini
+
 ⚡ **주요 기능**: 
   - 지능형 대화 AI
   - 미니게임 센터 (7가지 게임)
   - 실시간 날씨 정보
   - 점심 메뉴 추천 (200가지)
   - 전국 도시별 날씨 조회
+
 🎮 **게임 통계**:
   - 밸런스 게임: 100가지
   - 수수께끼: 12가지
   - 점수 시스템 및 랭킹
+
 🛠️ **개발 상태**: 정식 운영
 📅 **업데이트**: 지속적 개선 중
 🌍 **지원 도시**: 전국 226개 지역 + 해외 주요 도시
+
 📊 **특별 기능**:
   - 시간대별 맞춤 응답
   - 사용자별 게임 통계
   - 연속 출석 보너스
+
 궁금한 점이 있으시면 언제든 물어보세요! 😊"""
 
 @app.route('/', methods=['GET'])
