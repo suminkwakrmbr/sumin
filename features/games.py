@@ -14,7 +14,22 @@ class GameManager:
         
         # 단체방 지원을 위한 수정
         self.game_sessions = defaultdict(dict)  # room_id별 세션 관리
-        self.user_stats = defaultdict(lambda: defaultdict(int))
+        
+        self.user_stats = defaultdict(lambda: {
+            'total_games': 0,
+            'balance_games': 0,
+            'number_games': 0,
+            'rps_wins': 0,
+            'rps_loses': 0,
+            'rps_draws': 0,
+            'attendance_days': 0,
+            '숫자게임_승리': 0,
+            '숫자게임_패배': 0,
+            '가위바위보_승리': 0,
+            '가위바위보_패배': 0,
+            '가위바위보_무승부': 0,
+            '출석일수': 0
+        })
         
         # 방별 데이터 추가
         self.room_data = defaultdict(lambda: {
@@ -25,7 +40,6 @@ class GameManager:
         # 사주 운세를 위한 사용자 생년월일 저장
         self.user_birth_info = {}
         
-        # balance_games를 __init__에서 정의
         self.balance_games = [
             # 음식 관련
             {"A": "🍕 평생 피자만 먹기", "B": "🍔 평생 햄버거만 먹기"},
