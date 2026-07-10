@@ -13,6 +13,7 @@ class GameManager:
         # 단체방 지원을 위한 수정
         self.game_sessions = defaultdict(dict)  # room_id별 세션 관리
         
+        # user_stats를 일반 딕셔너리로 변경
         self.user_stats = defaultdict(lambda: {
             'total_games': 0,
             'balance_games': 0,
@@ -29,18 +30,45 @@ class GameManager:
             '출석일수': 0
         })
         
-        # 방별 데이터 추가
-        self.room_data = defaultdict(lambda: {
-            'last_balance_game': None,
-            'group_votes': defaultdict(list)
-        })
+        # room_data를 일반 딕셔너리로 변경
+        self.room_data = {}
         
         # 사주 운세를 위한 사용자 생년월일 저장
         self.user_birth_info = {}
-        def get_session_key(self, user_id, room_id, game_type="default"):
-            """고유 세션 키 생성"""
-            return f"{room_id}_{user_id}_{game_type}"
+
+    def get_room_data(self, room_id):
+        """방 데이터 안전하게 가져오기"""
+        if room_id not in self.room_data:
+            self.room_data[room_id] = {
+                'last_balance_game': None,
+                'group_votes': defaultdict(list)
+            }
+        return self.room_data[room_id]
+    
+    def get_user_stats(self, user_id):
+        """사용자 통계 안전하게 가져오기"""
+        if user_id not in self.user_stats:
+            self.user_stats[user_id] = {
+                'total_games': 0,
+                'balance_games': 0,
+                'number_games': 0,
+                'rps_wins': 0,
+                'rps_loses': 0,
+                'rps_draws': 0,
+                'attendance_days': 0,
+                '숫자게임_승리': 0,
+                '숫자게임_패배': 0,
+                '가위바위보_승리': 0,
+                '가위바위보_패배': 0,
+                '가위바위보_무승부': 0,
+                '출석일수': 0
+            }
+        return self.user_stats[user_id]
         
+    def get_session_key(self, user_id, room_id, game_type="default"):
+        """고유 세션 키 생성"""
+        return f"{room_id}_{user_id}_{game_type}"
+    
     def get_session_key(self, user_id, room_id, game_type="default"):
         """고유 세션 키 생성"""
         return f"{room_id}_{user_id}_{game_type}"
@@ -53,8 +81,152 @@ class GameManager:
     def balance_game_with_voting(self, room_id):
         """단체방용 밸런스 게임 (투표 기능)"""
         game = random.choice(self.balance_games)
-        self.room_data[room_id]['last_balance_game'] = game
-        self.room_data[room_id]['group_votes'] = defaultdict(list)
+        room_data = self.get_room_data(room_id)
+        room_data['last_balance_game'] = game
+        room_data['group_votes'] = defaultdict(list)
+
+        self.balance_games = [
+    
+            # 음식 관련
+            {"A": "🍕 평생 피자만 먹기", "B": "🍔 평생 햄버거만 먹기"},
+            {"A": "🌶️ 평생 매운 음식만 먹기", "B": "🧊 평생 차가운 음식만 먹기"},
+            {"A": "🍰 평생 단 것만 먹기", "B": "🧂 평생 짠 것만 먹기"},
+            {"A": "🥗 평생 건강식만 먹기", "B": "🍟 평생 정크푸드만 먹기"},
+            {"A": "🍜 평생 국물 음식만 먹기", "B": "🍞 평생 마른 음식만 먹기"},
+            
+            # 능력 관련
+            {"A": "✈️ 하늘을 날 수 있지만 걷지 못함", "B": "🏃‍♂️ 엄청 빠르게 달릴 수 있지만 날지 못함"},
+            {"A": "🔮 미래를 볼 수 있지만 바꿀 수 없음", "B": "⏰ 과거로 갈 수 있지만 한 번만"},
+            {"A": "🧠 천재가 되지만 친구가 없음", "B": "😊 평범하지만 인기가 많음"},
+            {"A": "👁️ 투시 능력이 있지만 끌 수 없음", "B": "👂 텔레파시 능력이 있지만 조절 불가"},
+            {"A": "💪 힘이 무지막지 강하지만 조절 불가", "B": "🤸 몸이 고무처럼 늘어나지만 아픔"},
+            
+            # 돈과 시간
+            {"A": "💰 돈은 많지만 시간이 없음", "B": "⏰ 시간은 많지만 돈이 없음"},
+            {"A": "💳 카드는 무제한이지만 현금 0원", "B": "💵 현금만 무제한이지만 카드 사용 불가"},
+            {"A": "🏆 평생 복권 1등이지만 친구 잃음", "B": "🤝 평생 가난하지만 진실한 친구들"},
+            {"A": "💎 부자지만 절대 쓸 수 없음", "B": "🆓 가난하지만 모든 게 공짜"},
+            {"A": "💸 매일 100만원 벌지만 매일 써야 함", "B": "💰 한 번에 1억 받지만 평생 벌 수 없음"},
+            
+            # 성격과 감정
+            {"A": "🤖 로봇처럼 감정이 없지만 완벽함", "B": "😭 감정이 풍부하지만 실수가 많음"},
+            {"A": "😊 항상 행복하지만 현실 인식 불가", "B": "😢 항상 슬프지만 현실을 정확히 봄"},
+            {"A": "😡 화를 절대 낼 수 없음", "B": "😨 두려움을 절대 느낄 수 없음"},
+            {"A": "🥰 모든 사람을 사랑하지만 사랑받지 못함", "B": "💔 사랑할 수 없지만 모든 사람이 좋아함"},
+            {"A": "🎭 감정을 숨길 수 있지만 혼자만 앎", "B": "📢 감정이 다 드러나지만 공감받음"},
+            
+            # 지식과 소통
+            {"A": "📚 모든 지식을 알지만 소통 불가", "B": "💬 소통의 달인이지만 무식함"},
+            {"A": "🔤 모든 언어를 알지만 말을 못함", "B": "🗣️ 말은 잘하지만 한 언어만 가능"},
+            {"A": "📖 모든 책을 기억하지만 창의력 0", "B": "🎨 창의력 무한이지만 기억력 0"},
+            {"A": "🧮 수학 천재지만 다른 건 바보", "B": "🎵 예술 천재지만 논리력 0"},
+            {"A": "🔬 과학만 알고 인문학 무지", "B": "📜 인문학만 알고 과학 무지"},
+            
+            # 생활과 환경
+            {"A": "🏠 집에서만 살지만 모든 게 무료", "B": "🌍 어디든 갈 수 있지만 돈이 듦"},
+            {"A": "🌞 항상 낮이지만 잠들 수 없음", "B": "🌙 항상 밤이지만 깨어있을 수 없음"},
+            {"A": "🥶 항상 춥지만 건강함", "B": "🥵 항상 덥지만 아프지 않음"},
+            {"A": "☔ 평생 비가 오는 곳에서 살기", "B": "🌵 평생 사막에서 살기"},
+            {"A": "🏔️ 산꼭대기에서만 살 수 있음", "B": "🏖️ 바닷가에서만 살 수 있음"},
+            
+            # 기술과 미디어
+            {"A": "📱 모든 앱이 무료지만 인터넷 1시간/일", "B": "💻 무제한 인터넷이지만 모든 앱 유료"},
+            {"A": "📺 TV만 볼 수 있고 핸드폰 금지", "B": "📱 핸드폰만 쓸 수 있고 TV 금지"},
+            {"A": "🎮 게임만 할 수 있고 다른 미디어 금지", "B": "📚 책만 읽을 수 있고 전자기기 금지"},
+            {"A": "💬 메신저만 가능하고 통화 불가", "B": "📞 통화만 가능하고 메신저 불가"},
+            {"A": "📸 사진은 찍을 수 있지만 볼 수 없음", "B": "👀 사진은 볼 수 있지만 찍을 수 없음"},
+            
+            # 음악과 엔터테인먼트
+            {"A": "🎵 평생 같은 노래만 들을 수 있음", "B": "🔇 평생 음악을 들을 수 없음"},
+            {"A": "🎤 노래는 잘하지만 춤을 못춤", "B": "💃 춤은 잘추지만 노래를 못함"},
+            {"A": "🎬 영화만 볼 수 있고 드라마 금지", "B": "📺 드라마만 볼 수 있고 영화 금지"},
+            {"A": "😂 코미디만 볼 수 있음", "B": "😢 슬픈 영화만 볼 수 있음"},
+            {"A": "🎪 라이브만 볼 수 있고 영상 금지", "B": "📱 영상만 볼 수 있고 라이브 금지"},
+            
+            # 외모와 스타일
+            {"A": "👗 평생 같은 옷만 입기", "B": "👕 매일 다른 옷이지만 어울리지 않음"},
+            {"A": "💇 머리카락이 계속 자라지만 자를 수 없음", "B": "👨‍🦲 머리카락이 영원히 안 자람"},
+            {"A": "👥 항상 똑같은 얼굴", "B": "🎭 매일 다른 얼굴로 변함"},
+            {"A": "👔 격식 있는 옷만 입을 수 있음", "B": "👕 캐주얼한 옷만 입을 수 있음"},
+            {"A": "🌈 무지개색 머리카락", "B": "⚫ 검은색만 입을 수 있음"},
+            
+            # 인간관계
+            {"A": "👥 많은 친구가 있지만 얕은 관계", "B": "👤 친구는 한 명뿐이지만 깊은 관계"},
+            {"A": "💑 연애는 잘하지만 결혼 못함", "B": "💒 결혼은 잘하지만 연애 못함"},
+            {"A": "👶 아이들만 좋아함", "B": "👴 어른들만 좋아함"},
+            {"A": "🗣️ 말은 많이 하지만 경청 못함", "B": "👂 경청은 잘하지만 말을 못함"},
+            {"A": "🤝 신뢰는 받지만 사랑받지 못함", "B": "💕 사랑은 받지만 신뢰받지 못함"},
+            
+            # 직업과 성공
+            {"A": "💼 좋아하지 않는 일로 성공", "B": "❤️ 좋아하는 일로 평범하게 살기"},
+            {"A": "🏆 1등이지만 혼자 성취", "B": "🤝 2등이지만 팀과 함께 성취"},
+            {"A": "💰 돈 많이 버는 지루한 직업", "B": "🎨 돈 적게 버는 재미있는 직업"},
+            {"A": "📈 성공했지만 스트레스 많음", "B": "😌 평범하지만 스트레스 없음"},
+            {"A": "🌟 유명하지만 사생활 없음", "B": "🔒 무명이지만 자유로운 삶"},
+            
+            # 건강과 운동
+            {"A": "💪 힘은 세지만 지구력 0", "B": "🏃 지구력은 좋지만 힘이 없음"},
+            {"A": "🧘 정신건강은 좋지만 몸이 약함", "B": "💪 몸은 건강하지만 정신적으로 불안"},
+            {"A": "🥗 건강식만 먹지만 맛없음", "B": "🍰 맛있는 것만 먹지만 건강 악화"},
+            {"A": "😴 잠은 많이 자지만 항상 피곤", "B": "☕ 잠은 못 자지만 항상 활기참"},
+            {"A": "🚫 병에 안 걸리지만 다칠 수 있음", "B": "🩹 다치지 않지만 병에 걸릴 수 있음"},
+            
+            # 학습과 교육
+            {"A": "📝 시험은 잘 보지만 실무 못함", "B": "💼 실무는 잘하지만 시험 못 봄"},
+            {"A": "🎓 공부는 잘하지만 적용 못함", "B": "🔧 적용은 잘하지만 이론 모름"},
+            {"A": "📚 암기는 잘하지만 이해 못함", "B": "💡 이해는 잘하지만 기억 못함"},
+            {"A": "✏️ 글은 잘 쓰지만 말 못함", "B": "🗣️ 말은 잘하지만 글 못 씀"},
+            {"A": "🔢 수학만 잘함", "B": "📖 국어만 잘함"},
+            
+            # 여행과 모험
+            {"A": "✈️ 해외여행만 가능", "B": "🚗 국내여행만 가능"},
+            {"A": "🏝️ 휴양지만 갈 수 있음", "B": "🏔️ 산악지대만 갈 수 있음"},
+            {"A": "🎒 혼자 여행만 가능", "B": "👥 단체 여행만 가능"},
+            {"A": "🚶 걸어서만 여행 가능", "B": "✈️ 비행기로만 이동 가능"},
+            {"A": "📷 여행 사진만 찍을 수 있음", "B": "📝 여행 일기만 쓸 수 있음"},
+            
+            # 취미와 여가
+            {"A": "🎨 그림만 그릴 수 있음", "B": "🎵 음악만 들을 수 있음"},
+            {"A": "📚 독서만 할 수 있음", "B": "🎮 게임만 할 수 있음"},
+            {"A": "🏃 운동만 할 수 있음", "B": "🛋️ 휴식만 할 수 있음"},
+            {"A": "🧩 퍼즐만 맞출 수 있음", "B": "🎯 다트만 던질 수 있음"},
+            {"A": "🎪 구경만 할 수 있음", "B": "🎭 참여만 할 수 있음"},
+            
+            # 계절과 날씨
+            {"A": "❄️ 겨울만 있는 곳에서 살기", "B": "☀️ 여름만 있는 곳에서 살기"},
+            {"A": "🌸 봄만 있는 곳에서 살기", "B": "🍂 가을만 있는 곳에서 살기"},
+            {"A": "🌧️ 비 오는 날만 좋아함", "B": "☀️ 맑은 날만 좋아함"},
+            {"A": "❄️ 눈 오는 날에만 외출 가능", "B": "🌞 햇빛 나는 날에만 외출 가능"},
+            {"A": "🌪️ 바람 부는 날만 활기참", "B": "🌅 고요한 날만 평온함"},
+            
+            # 교통과 이동
+            {"A": "🚗 자동차로만 이동 가능", "B": "🚶 걸어서만 이동 가능"},
+            {"A": "🚇 지하철로만 이동 가능", "B": "🚌 버스로만 이동 가능"},
+            {"A": "🚲 자전거로만 이동 가능", "B": "🛴 킥보드로만 이동 가능"},
+            {"A": "✈️ 비행기로만 장거리 이동", "B": "🚂 기차로만 장거리 이동"},
+            {"A": "🏃 빠르게 이동하지만 쉽게 피곤", "B": "🐌 느리게 이동하지만 절대 안 피곤"},
+            
+            # 미래와 과거
+            {"A": "📱 최신 기술만 사용 가능", "B": "📻 옛날 기술만 사용 가능"},
+            {"A": "🔮 미래만 생각함", "B": "📜 과거만 생각함"},
+            {"A": "⏰ 시간을 앞당길 수 있음", "B": "⏳ 시간을 늦출 수 있음"},
+            {"A": "📅 내일만 알 수 있음", "B": "📆 어제만 기억할 수 있음"},
+            {"A": "🚀 미래로만 갈 수 있음", "B": "🏛️ 과거로만 갈 수 있음"},
+            
+            # 감각과 인지
+            {"A": "👀 시각만 뛰어남", "B": "👂 청각만 뛰어남"},
+            {"A": "👃 후각만 뛰어남", "B": "👅 미각만 뛰어남"},
+            {"A": "✋ 촉각만 뛰어남", "B": "🧠 직감만 뛰어남"},
+            {"A": "🎨 색깔을 잘 구분함", "B": "🔊 소리를 잘 구분함"},
+            {"A": "👁️ 멀리는 잘 보지만 가까이 못 봄", "B": "🔍 가까이는 잘 보지만 멀리 못 봄"},
+            
+            # 마지막 특별한 것들
+            {"A": "🎭 연기는 잘하지만 진실을 말할 수 없음", "B": "💯 진실만 말하지만 연기를 못함"},
+            {"A": "🎲 운이 매우 좋지만 노력 효과 없음", "B": "💪 노력한 만큼 성과가 나지만 운이 없음"},
+            {"A": "🔄 실수를 되돌릴 수 있지만 성공도 되돌려짐", "B": "⚡ 한 번의 기회만 있지만 확실한 성공"},
+            {"A": "👑 왕이 되지만 책임이 무거움", "B": "🆓 자유롭지만 영향력이 없음"},
+            {"A": "🌟 영원히 살지만 사랑하는 사람들은 떠남", "B": "⏰ 짧게 살지만 모든 순간이 의미있음"}
+        ]
         
         return f"⚖️ **밸런스 게임!**\n\n1️⃣ {game['A']}\n\n🆚\n\n2️⃣ {game['B']}\n\n둘 중 뭘 선택할래? (1 또는 2로 답변)\n💡 이유도 함께 말해주면 더 재미있어요!\n\n👥 **단체방 모드**: 모두 1 또는 2로 투표해보세요!\n결과는 '/게임 결과'로 확인!"
     
@@ -66,11 +238,12 @@ class GameManager:
         if room_id == 'private':
             return "개인 메시지에서는 투표 기능을 사용할 수 없어요!"
         
-        if not self.room_data[room_id]['last_balance_game']:
+        room_data = self.get_room_data(room_id)
+        if not room_data['last_balance_game']:
             return "진행 중인 밸런스 게임이 없습니다! '/게임 밸런스'로 새 게임을 시작해주세요!"
         
         # 기존 투표 제거
-        user_votes = self.room_data[room_id]['group_votes']
+        user_votes = room_data['group_votes']
         for vote_choice in ['A', 'B']:
             if user_id in user_votes[vote_choice]:
                 user_votes[vote_choice].remove(user_id)
@@ -86,11 +259,12 @@ class GameManager:
         if room_id == 'private':
             return "개인 메시지에서는 투표 결과를 확인할 수 없어요!"
         
-        game = self.room_data[room_id]['last_balance_game']
+        room_data = self.get_room_data(room_id)
+        game = room_data['last_balance_game']
         if not game:
             return "진행 중인 밸런스 게임이 없습니다!"
         
-        votes = self.room_data[room_id]['group_votes']
+        votes = room_data['group_votes']
         a_count = len(votes['A'])
         b_count = len(votes['B'])
         total = a_count + b_count
@@ -207,6 +381,13 @@ class GameManager:
             "이거 어때요?", "추천드려요!", "오늘의 베스트 선택!", 
             "맛있을 것 같아요!", "좋은 하루 되세요!", "든든한 한 끼!"
         ]
+        selected = random.choice(self.lunch_menus)
+        
+        comments = [
+            "오늘 딱 좋은 선택이에요!", "맛있게 드세요!", "좋은 선택입니다!",
+            "오늘 기분에 딱 맞는 메뉴네요!", "든든하게 드세요!", "맛있는 점심 되세요!",
+            "완벽한 선택이에요!", "오늘은 이걸로 결정!", "행복한 식사 시간 되세요!"
+        ]
         comment = random.choice(comments)
         
         # 시간대별 인사말
@@ -265,7 +446,8 @@ class GameManager:
             score = max(15 - attempts * 2, 3)
             
             self.user_scores[f"{room_id}_{user_id}"] += score
-            self.user_stats[f"{room_id}_{user_id}"]['숫자게임_승리'] += 1
+            stats = self.get_user_stats(f"{room_id}_{user_id}")
+            stats['숫자게임_승리'] += 1
             del self.game_sessions[session_key]
             
             return f"🎉 **정답입니다!**\n\n🎯 답: {answer}\n🎮 시도: {attempts}번\n⏰ 시간: {time_taken:.1f}초\n🏆 점수: +{score}점\n\n'/게임 숫자'로 새 게임 시작!"
@@ -273,7 +455,8 @@ class GameManager:
         remaining = session['max_attempts'] - session['attempts']
         
         if remaining <= 0:
-            self.user_stats[f"{room_id}_{user_id}"]['숫자게임_패배'] += 1
+            stats = self.get_user_stats(f"{room_id}_{user_id}")
+            stats['숫자게임_패배'] += 1
             del self.game_sessions[session_key]
             return f"😅 **게임 오버!**\n\n🎯 정답: {answer}\n🎮 총 시도: {session['max_attempts']}번\n\n'/게임 숫자'로 다시 도전!"
         
@@ -307,17 +490,19 @@ class GameManager:
         
         result_msg = f"🎮 **가위바위보!**\n\n👤 당신: {user_emoji} {user_choice}\n🤖 봇: {bot_emoji} {bot_choice}\n\n"
         
+        stats = self.get_user_stats(user_id)
+        
         if user_choice == bot_choice:
-            self.user_stats[user_id]['가위바위보_무승부'] += 1
+            stats['가위바위보_무승부'] += 1
             return result_msg + "🤝 **무승부**입니다!"
         elif (user_choice == "가위" and bot_choice == "보") or \
              (user_choice == "바위" and bot_choice == "가위") or \
              (user_choice == "보" and bot_choice == "바위"):
             self.user_scores[user_id] += 3
-            self.user_stats[user_id]['가위바위보_승리'] += 1
+            stats['가위바위보_승리'] += 1
             return result_msg + "🎉 **당신의 승리!** +3점"
         else:
-            self.user_stats[user_id]['가위바위보_패배'] += 1
+            stats['가위바위보_패배'] += 1
             return result_msg + "😅 **봇의 승리!** 다시 도전해보세요!"
 
     def daily_attendance(self, user_id):
@@ -338,7 +523,8 @@ class GameManager:
         total_points = base_points + bonus
         
         self.user_scores[user_id] += total_points
-        self.user_stats[user_id]['출석일수'] += 1
+        stats = self.get_user_stats(user_id)
+        stats['출석일수'] += 1
         
         bonus_msg = f"\n🎁 연속 보너스: +{bonus}점" if bonus > 0 else ""
         
@@ -357,8 +543,6 @@ class GameManager:
                 consecutive += 1
             else:
                 break
-        
-        return consecutive
 
     def fortune_telling(self, user_id, birth_info=None):
         """사주 기반 오늘의 운세"""
